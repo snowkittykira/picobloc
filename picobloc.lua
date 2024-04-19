@@ -75,10 +75,6 @@
 --
 -- the same example is presented in more structured way in the example/ folder
 --
--- ## api
---
--- todo
---
 -- ## other picotron ecs libraries
 --
 -- these two model entities as lua tables rather than integer ids, so are probably easier to use
@@ -114,7 +110,6 @@
 -- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 -- FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 -- DEALINGS IN THE SOFTWARE.
-
 
 ---- buffer --------------------------------------
 
@@ -339,6 +334,9 @@ end
 local World = {}
 World.__index = World
 
+--- `local world = World()`
+---
+--- returns a new world object. it contains the rest of the api.
 function World.new ()
   local self = setmetatable ({}, World)
   self.resources = {} -- for user
@@ -351,6 +349,11 @@ function World.new ()
   return self
 end
 
+--- `world:component (name, { field_name = field_type, ... })`
+---
+--- creates a new component type. valid field types are the picotron userdata
+--- types, or the string 'value', which means the field is stored in a plain lua
+--- table instead of a userdata.
 function World:component (name, fields)
   assert (not self._component_types [name])
   local component = {}
@@ -360,6 +363,12 @@ function World:component (name, fields)
   self._component_types [name] = component
 end
 
+--- `local id = world:add_entity ({ component_name = { component_field = value, ... }, ... })`
+---
+--- adds an entity with the given components, initializing their fields to the
+--- given values. missing fields are initialized to 0. if done within a query,
+--- this operation will be deferred until the query ends, so don't modify the
+--- passed table after calling this.
 function World:add_entity (component_values)
   assert (component_values)
   table.insert (self._deferred_operations, function ()
@@ -368,6 +377,11 @@ function World:add_entity (component_values)
   self:_process_deferred ()
 end
 
+--- `world:remove_entity (id)`
+---
+--- removes an entity by id. if done within a query, this operation will be
+--- deferred until the query ends, so don't modify the passed table after
+--- calling this.
 function World:remove_entity (id)
   assert (self._id_to_archetype, 'tried to remove non-existent entity')
   table.insert (self._deferred_operations, function ()
@@ -376,6 +390,20 @@ function World:remove_entity (id)
   self:_process_deferred ()
 end
 
+--- `world:entity_exists (id)`
+--- 
+--- returns true if the entity exists, or false.
+function World:entity_exists(id)
+  return self._id_to_archetype [id] ~= nil
+end
+
+--- `world:add_components (id, { component_name = { component_field = value, ...}, ...})`
+---
+--- adds components to an existing entity. field values are initialized to the
+--- provided values or to 0. adding a component that is already on the entity 
+--- does nothing (i.e. the component values are not changed). if done within a
+--- query, this operation will be deferred until the query ends, so don't
+--- modify the passed table after calling this.
 function World:add_components (id, new_component_values)
   assert (self._id_to_archetype [id], 'tried to add components to non-existent entity')
   assert (new_component_values)
@@ -386,6 +414,11 @@ function World:add_components (id, new_component_values)
   self:_process_deferred ()
 end
 
+--- `world:remove_components (id, { 'component_name', ...})`
+---
+--- removes the named components from the entity. if done within a query, this
+--- operation will be deferred until the query ends, so don't modify the passed
+--- table after calling this.
 function World:remove_components (id, component_list)
   assert (#component_list > 0)
   assert (self._id_to_archetype [id], 'tried to remove components from non-existent entity')
@@ -395,6 +428,32 @@ function World:remove_components (id, component_list)
   self:_process_deferred ()
 end
 
+--- `world:query ({'component_query', ...}, function (ids, component_name, ...) ... end)`
+---
+--- queries all entity archetypes and calls a function for each group that
+--- matches. this is the main way to access entities. `fn` is called with the
+--- following arguments:
+---
+--- - the map of {index -> entity id} for all the entities.
+--- - the map of {field -> buffer} for the fields of each requested component.
+---   the buffer will usually be a picotron userdata, but can be a lua table
+---   if the corresponding field type is 'value' (or if not running in picotron).
+---
+--- note that all of the buffers are *zero-based*, unlike normal lua tables.
+--- `ids.count` gives the number of entities in this batch, so to loop over all
+--- the entities, use `for i = 0, ids.count-1 do ... end`.
+--- 
+--- `'component_query'` can be:
+---
+--- - the name of a component, which will be required, its field buffers given
+---   as an argument to `fn`.
+--- - a component name followed by `?`, which signals that the component is
+---   optional. the corresponding argument to `fn` will be `nil` if it isn't present.
+--- - `!` followed by the name of the component, which means the archetype must
+---   not have the given component. no matching argument will be given to `fn`.
+---
+--- you may remove/add entities and components during a query, using the entity
+--- ids in `ids`, but it won't actually happen until the whole query is done.
 function World:query (component_list, fn)
   self._query_depth = self._query_depth + 1
   local required_components, negative_components, queried_components = process_query (component_list)
@@ -407,10 +466,14 @@ function World:query (component_list, fn)
   self:_process_deferred ()
 end
 
-function World:entity_exists(id)
-  return self._id_to_archetype [id] ~= nil
-end
-
+--- `world:query_entity (id, {'component_query', ...}, function (index, component_name, ...) ... end)`
+--- 
+--- queries an individual entity. use this to access/change an individual
+--- entity's values. `fn` will be given the entity's index within the provided
+--- buffers. if the entity does not match the given query, `fn` will not be called.
+---
+--- you may remove/add entities and components during a query, but it won't
+--- actually happen until the whole query is done.
 function World:query_entity (id, component_list, fn)
   self._query_depth = self._query_depth + 1
   local required_components, negative_components, queried_components = process_query (component_list)

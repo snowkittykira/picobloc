@@ -75,10 +75,6 @@ end
 
 the same example is presented in more structured way in the example/ folder
 
-## api
-
-todo
-
 ## other picotron ecs libraries
 
 these two model entities as lua tables rather than integer ids, so are probably easier to use
@@ -92,3 +88,82 @@ if you aren't planning on using block userdata operations:
 - [require function for loading lua modules](https://www.lexaloffle.com/bbs/?tid=140784) - used in `example/compat.lua`
 - [picotron_userdata.txt](https://www.lexaloffle.com/dl/docs/picotron_userdata.html) - has information on block userdata operations
 - [Picotron User Manual](https://www.lexaloffle.com/dl/docs/picotron_manual.html) - more up-to-date picotron info
+
+## api
+
+`local world = World()`
+
+returns a new world object. it contains the rest of the api.
+
+`world:component (name, { field_name = field_type, ... })`
+
+creates a new component type. valid field types are the picotron userdata
+types, or the string 'value', which means the field is stored in a plain lua
+table instead of a userdata.
+
+`local id = world:add_entity ({ component_name = { component_field = value, ... }, ... })`
+
+adds an entity with the given components, initializing their fields to the
+given values. missing fields are initialized to 0. if done within a query,
+this operation will be deferred until the query ends, so don't modify the
+passed table after calling this.
+
+`world:remove_entity (id)`
+
+removes an entity by id. if done within a query, this operation will be
+deferred until the query ends, so don't modify the passed table after
+calling this.
+
+`world:entity_exists (id)`
+
+returns true if the entity exists, or false.
+
+`world:add_components (id, { component_name = { component_field = value, ...}, ...})`
+
+adds components to an existing entity. field values are initialized to the
+provided values or to 0. adding a component that is already on the entity 
+does nothing (i.e. the component values are not changed). if done within a
+query, this operation will be deferred until the query ends, so don't
+modify the passed table after calling this.
+
+`world:remove_components (id, { 'component_name', ...})`
+
+removes the named components from the entity. if done within a query, this
+operation will be deferred until the query ends, so don't modify the passed
+table after calling this.
+
+`world:query ({'component_query', ...}, function (ids, component_name, ...) ... end)`
+
+queries all entity archetypes and calls a function for each group that
+matches. this is the main way to access entities. `fn` is called with the
+following arguments:
+
+- the map of {index -> entity id} for all the entities.
+- the map of {field -> buffer} for the fields of each requested component.
+  the buffer will usually be a picotron userdata, but can be a lua table
+  if the corresponding field type is 'value' (or if not running in picotron).
+
+note that all of the buffers are *zero-based*, unlike normal lua tables.
+`ids.count` gives the number of entities in this batch, so to loop over all
+the entities, use `for i = 0, ids.count-1 do ... end`.
+
+`'component_query'` can be:
+
+- the name of a component, which will be required, its field buffers given
+  as an argument to `fn`.
+- a component name followed by `?`, which signals that the component is
+  optional. the corresponding argument to `fn` will be `nil` if it isn't present.
+- `!` followed by the name of the component, which means the archetype must
+  not have the given component. no matching argument will be given to `fn`.
+
+you may remove/add entities and components during a query, using the entity
+ids in `ids`, but it won't actually happen until the whole query is done.
+
+`world:query_entity (id, {'component_query', ...}, function (index, component_name, ...) ... end)`
+
+queries an individual entity. use this to access/change an individual
+entity's values. `fn` will be given the entity's index within the provided
+buffers. if the entity does not match the given query, `fn` will not be called.
+
+you may remove/add entities and components during a query, but it won't
+actually happen until the whole query is done.

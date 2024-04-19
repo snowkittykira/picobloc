@@ -1,15 +1,17 @@
 -- # picobloc
 --
--- an archetype and userdata-based ecs library for picotron
+-- an archetype and userdata-based ecs library for picotron.
 --
 -- very much work in progress!
 --
 -- entities are just integer ids, components are sorted into archetypes based on their components,
--- component fields are in struct-of-arrays-style in picotron userdata for fast processing
+-- component fields are in struct-of-arrays-style in picotron userdata for fast processing.
 --
--- it can also be used without picotron, in which case it stores component fields in lua tables (still 0-based)
+-- it can also be used without picotron, in which case it stores component fields in lua tables (still 0-based).
 --
 -- ## example usage
+--
+-- you can see the example running [here](https://www.lexaloffle.com/bbs/?tid=141824).
 --
 -- ```lua
 -- include 'picobloc.lua'

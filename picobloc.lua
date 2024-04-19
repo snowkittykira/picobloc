@@ -334,7 +334,9 @@ end
 local World = {}
 World.__index = World
 
---- `local world = World()`
+--- ```lua
+--- local world = World()
+--- ```
 ---
 --- returns a new world object. it contains the rest of the api.
 function World.new ()
@@ -349,7 +351,9 @@ function World.new ()
   return self
 end
 
---- `world:component (name, { field_name = field_type, ... })`
+--- ```lua
+--- world:component (name, { field_name = field_type, ... })
+--- ```
 ---
 --- creates a new component type. valid field types are the picotron userdata
 --- types, or the string 'value', which means the field is stored in a plain lua
@@ -363,7 +367,9 @@ function World:component (name, fields)
   self._component_types [name] = component
 end
 
---- `local id = world:add_entity ({ component_name = { component_field = value, ... }, ... })`
+--- ```lua
+--- local id = world:add_entity ({ component_name = { component_field = value, ... }, ... })
+--- ```
 ---
 --- adds an entity with the given components, initializing their fields to the
 --- given values. missing fields are initialized to 0. if done within a query,
@@ -377,7 +383,9 @@ function World:add_entity (component_values)
   self:_process_deferred ()
 end
 
---- `world:remove_entity (id)`
+--- ```lua
+--- world:remove_entity (id)
+--- ```
 ---
 --- removes an entity by id. if done within a query, this operation will be
 --- deferred until the query ends, so don't modify the passed table after
@@ -390,14 +398,18 @@ function World:remove_entity (id)
   self:_process_deferred ()
 end
 
---- `world:entity_exists (id)`
+--- ```lua
+--- world:entity_exists (id)
+--- ```
 --- 
 --- returns true if the entity exists, or false.
 function World:entity_exists(id)
   return self._id_to_archetype [id] ~= nil
 end
 
---- `world:add_components (id, { component_name = { component_field = value, ...}, ...})`
+--- ```lua
+--- world:add_components (id, { component_name = { component_field = value, ...}, ...})
+--- ```
 ---
 --- adds components to an existing entity. field values are initialized to the
 --- provided values or to 0. adding a component that is already on the entity 
@@ -414,7 +426,9 @@ function World:add_components (id, new_component_values)
   self:_process_deferred ()
 end
 
---- `world:remove_components (id, { 'component_name', ...})`
+--- ```lua
+--- world:remove_components (id, { 'component_name', ...})
+--- ```
 ---
 --- removes the named components from the entity. if done within a query, this
 --- operation will be deferred until the query ends, so don't modify the passed
@@ -428,7 +442,9 @@ function World:remove_components (id, component_list)
   self:_process_deferred ()
 end
 
---- `world:query ({'component_query', ...}, function (ids, component_name, ...) ... end)`
+--- ```lua
+--- world:query ({'component_query', ...}, function (ids, component_name, ...) ... end)
+--- ```
 ---
 --- queries all entity archetypes and calls a function for each group that
 --- matches. this is the main way to access entities. `fn` is called with the
@@ -466,7 +482,9 @@ function World:query (component_list, fn)
   self:_process_deferred ()
 end
 
---- `world:query_entity (id, {'component_query', ...}, function (index, component_name, ...) ... end)`
+--- ```lua
+--- world:query_entity (id, {'component_query', ...}, function (index, component_name, ...) ... end)
+--- ```
 --- 
 --- queries an individual entity. use this to access/change an individual
 --- entity's values. `fn` will be given the entity's index within the provided

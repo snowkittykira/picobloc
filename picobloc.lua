@@ -4,7 +4,7 @@
 --
 -- very much work in progress!
 --
--- entities are just integer ids, components are sorted into archetypes based on their components,
+-- entities are just integer ids, their data sorted into archetypes based on their components.
 -- component fields are in struct-of-arrays-style in picotron userdata for fast processing.
 --
 -- it can also be used without picotron, in which case it stores component fields in lua tables (still 0-based).
@@ -390,8 +390,7 @@ end
 --- ```
 ---
 --- removes an entity by id. if done within a query, this operation will be
---- deferred until the query ends, so don't modify the passed table after
---- calling this.
+--- deferred until the query ends.
 function World:remove_entity (id)
   assert (self._id_to_archetype, 'tried to remove non-existent entity')
   table.insert (self._deferred_operations, function ()

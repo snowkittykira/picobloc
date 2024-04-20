@@ -100,6 +100,14 @@ local world = World()
 returns a new world object. it contains the rest of the api.
 
 ```lua
+world.resources
+```
+
+not used by picobloc itself, the world contains a `resources` table which
+you can use for storing any singletons / global state that needs to be
+accessed by systems.
+
+```lua
 world:component (name, { field_name = field_type, ... })
 ```
 
@@ -155,14 +163,14 @@ queries all entity archetypes and calls a function for each group that
 matches. this is the main way to access entities. `fn` is called with the
 following arguments:
 
-- the map of {index -> entity id} for all the entities.
-- the map of {field -> buffer} for the fields of each requested component.
-  the buffer will usually be a picotron userdata, but can be a lua table
+- the map of `{index -> entity id}` for all the entities in this archetype.
+- the maps of `{field -> buffer}` for the fields of each requested component.
+  the buffers will usually be picotron userdata, but can be lua tables
   if the corresponding field type is 'value' (or if not running in picotron).
 
-note that all of the buffers are *zero-based*, unlike normal lua tables.
-`ids.count` gives the number of entities in this batch, so to loop over all
-the entities, use `for i = 0, ids.count-1 do ... end`.
+note that all of these buffers (userdata or table) are *zero-based*, unlike
+typical lua. `ids.count` gives the number of entities in this batch, so to
+loop over all the entities, use `for i = 0, ids.count-1 do ... end`.
 
 `'component_query'` can be:
 

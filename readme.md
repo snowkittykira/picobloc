@@ -136,7 +136,15 @@ deferred until the query ends.
 world:entity_exists (id)
 ```
 
-returns true if the entity exists, or false.
+returns true if the entity exists, otherwise false. for deferred added
+entities this will return false until they are actually added.
+
+```lua
+world:entity_exists_or_pending (id)
+```
+
+returns true if the entity exists or has been queued for addition,
+otherwise false
 
 ```lua
 world:add_components (id, { component_name = { component_field = value, ...}, ...})

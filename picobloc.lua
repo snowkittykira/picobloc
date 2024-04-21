@@ -356,7 +356,7 @@ function World.new ()
   local self = setmetatable ({}, World)
   self.resources = {} -- for user
   self._archetypes = {} -- list
-  self._id_to_archetype = {} -- map of id -> archetype
+  self._id_to_archetype = {} -- id -> archetype, false if an entity is queued for addition
   self._next_id = 1
   self._query_depth = 0
   self._deferred_operations = {}
@@ -390,10 +390,14 @@ end
 --- passed table after calling this.
 function World:add_entity (component_values)
   assert (component_values)
+  local id = self._next_id
+  self._id_to_archetype [id] = false -- mark as pending
+  self._next_id = self._next_id + 1
   table.insert (self._deferred_operations, function ()
-    self:_raw_add_entity (component_values)
+    self:_raw_add_entity (id, component_values)
   end)
   self:_process_deferred ()
+  return id
 end
 
 --- ```lua
@@ -403,7 +407,7 @@ end
 --- removes an entity by id. if done within a query, this operation will be
 --- deferred until the query ends.
 function World:remove_entity (id)
-  assert (self._id_to_archetype, 'tried to remove non-existent entity')
+  assert (self:entity_exists_or_pending (id), 'tried to remove non-existent entity')
   table.insert (self._deferred_operations, function ()
     self:_raw_remove_entity (id)
   end)
@@ -414,8 +418,19 @@ end
 --- world:entity_exists (id)
 --- ```
 --- 
---- returns true if the entity exists, or false.
-function World:entity_exists(id)
+--- returns true if the entity exists, otherwise false. for deferred added
+--- entities this will return false until they are actually added.
+function World:entity_exists (id)
+  return not not self._id_to_archetype [id]
+end
+--
+--- ```lua
+--- world:entity_exists_or_pending (id)
+--- ```
+--- 
+--- returns true if the entity exists or has been queued for addition,
+--- otherwise false
+function World:entity_exists_or_pending (id)
   return self._id_to_archetype [id] ~= nil
 end
 
@@ -429,7 +444,7 @@ end
 --- query, this operation will be deferred until the query ends, so don't
 --- modify the passed table after calling this.
 function World:add_components (id, new_component_values)
-  assert (self._id_to_archetype [id], 'tried to add components to non-existent entity')
+  assert (self:entity_exists_or_pending (id), 'tried to add components to non-existent entity')
   assert (new_component_values)
 
   table.insert (self._deferred_operations, function ()
@@ -447,7 +462,7 @@ end
 --- table after calling this.
 function World:remove_components (id, component_list)
   assert (#component_list > 0)
-  assert (self._id_to_archetype [id], 'tried to remove components from non-existent entity')
+  assert (self:entity_exists_or_pending (id), 'tried to remove components from non-existent entity')
   table.insert (self._deferred_operations, function ()
     self:_raw_remove_components (id, component_list)
   end)
@@ -507,7 +522,8 @@ end
 function World:query_entity (id, component_list, fn)
   self._query_depth = self._query_depth + 1
   local required_components, negative_components, queried_components = process_query (component_list)
-  local archetype = assert (self._id_to_archetype [id], 'entity doesn\'t exist')
+  assert (self:entity_exists (id), 'entity doesn\'t exist')
+  local archetype = self._id_to_archetype [id]
   if archetype:satisfies_query (required_components, negative_components) then
     archetype:query_entity (id, queried_components, fn)
   end
@@ -556,11 +572,9 @@ function World:_process_deferred ()
   end
 end
 
-function World:_raw_add_entity (component_values)
+function World:_raw_add_entity (id, component_values)
   -- component_values is a map of component_name -> table of field values
   local a = self:_find_archetype (component_values)
-  local id = self._next_id
-  self._next_id = self._next_id + 1
   a:add_entity (id, component_values)
   self._id_to_archetype [id] = a
 end
@@ -573,9 +587,10 @@ function World:_raw_remove_entity (id)
 end
 
 function World:_raw_add_components(id, new_component_values)
-  if not self._id_to_archetype [id] then
+  if not self:entity_exists_or_pending (id) then
     return
   end
+  assert (self:entity_exists (id))
   local current_archetype = self._id_to_archetype[id]
 
   -- build new component set
@@ -606,9 +621,10 @@ function World:_raw_add_components(id, new_component_values)
 end
 
 function World:_raw_remove_components (id, component_list)
-  if not self._id_to_archetype [id] then
+  if not self:entity_exists_or_pending (id) then
     return
   end
+  assert (self:entity_exists (id))
   local current_archetype = self._id_to_archetype [id]
 
   -- build new component set
@@ -717,8 +733,7 @@ local function test_world()
   })
 
   -- test adding entities
-  world:add_entity { position = { x = 5, y = 10 } }
-  local id = 1
+  local id = world:add_entity { position = { x = 5, y = 10 } }
   assert (world._next_id == 2, 'next id should be incremented')
   assert (world._id_to_archetype [id], 'entity should have an archetype')
 
@@ -727,19 +742,23 @@ local function test_world()
   assert (not world._id_to_archetype [id], 'entity should no longer be tracked after removal')
 
   -- test adding components
-  world:add_entity { position = { x = 5, y = 10 } }
-  id = 2
+  id = world:add_entity { position = { x = 5, y = 10 } }
   world:add_components (id, { size = {value = 15} })
   assert(world._id_to_archetype [id]._buffers.size, 'new component size should be added to the entity')
 
   -- test query
   local call_count = 0
+  local new_id
   world:query_entity (id, {'position', 'size'}, function (index, position, size)
     call_count = call_count + 1
     assert (position.x [index] == 5)
     assert (position.y [index] == 10)
     assert (size.value [index] == 15)
+    new_id = world:add_entity {position = {}}
+    assert (world:entity_exists (new_id) == false, 'entity shouldn\'t exist yet')
+    assert (world:entity_exists_or_pending (new_id) == true, 'entity should be pending')
   end)
+  assert (world:entity_exists (new_id) == true, 'entity should exist after query')
   assert (call_count == 1, 'query fn should be called once')
   call_count = 0
   world:query_entity (id, {'nonexistent_component'}, function (_index, _)

@@ -1,6 +1,7 @@
 -- # picobloc
 --
--- an archetype and userdata-based ecs library for picotron.
+-- an archetype and userdata-based ecs library for the
+-- [picotron fantasy workstation](https://www.lexaloffle.com/picotron.php).
 --
 -- very much work in progress!
 --
@@ -303,6 +304,8 @@ function Archetype:add_entity (id, component_values)
   self._id_to_index [id] = self._ids.count
   self._ids [self._ids.count] = id
   for component, buffer in pairs (self._buffers) do
+    assert (type (component_values[component]) == 'table',
+      'component values should be tables of fields')
     buffer:add (component_values [component] or {})
   end
   self._ids.count = self._ids.count + 1
@@ -322,7 +325,7 @@ function Archetype:remove_entity (id)
 end
 
 function Archetype:get_entity_component_values (id)
-  -- returns map of component -> {map of fieldname -> value}
+  -- returns map of component name -> {map of fieldname -> value}
   local values = {}
   local index = self._id_to_index [id]
   for component, buffer in pairs (self._buffers) do
@@ -347,7 +350,7 @@ World.__index = World
 --- ```
 --
 --- not used by picobloc itself, the world contains a `resources` table which
---- you can use for storing any singletons / global state that needs to be
+--- you can use for storing any singletons or global state that needs to be
 --- accessed by systems.
 function World.new ()
   local self = setmetatable ({}, World)
@@ -366,8 +369,8 @@ end
 --- ```
 ---
 --- creates a new component type. valid field types are the picotron userdata
---- types, or the string 'value', which means the field is stored in a plain lua
---- table instead of a userdata.
+--- types, or the string `'value'`, which means the field is stored in a plain
+--- lua table instead of a userdata.
 function World:component (name, fields)
   assert (not self._component_types [name])
   local component = {}
@@ -462,7 +465,7 @@ end
 --- - the map of `{index -> entity id}` for all the entities in this archetype.
 --- - the maps of `{field -> buffer}` for the fields of each requested component.
 ---   the buffers will usually be picotron userdata, but can be lua tables
----   if the corresponding field type is 'value' (or if not running in picotron).
+---   if the corresponding field type is `'value'` (or if not running in picotron).
 ---
 --- note that all of these buffers (userdata or table) are *zero-based*, unlike
 --- typical lua. `ids.count` gives the number of entities in this batch, so to
@@ -512,6 +515,19 @@ function World:query_entity (id, component_list, fn)
   self:_process_deferred ()
 end
 
+--- ```lua
+--- world:get_entity_component_values (id)
+--- ```
+--- creates and returns a table containing a map of
+--- `{component_name -> {field_name -> field_value}}`.
+--- this is a copy of the original data, so modifying it has no effect on the
+--- entity. use this when you want to get all the component values, without
+--- knowing in advance which components are present.
+function World:get_entity_component_values (id)
+  assert (self:entity_exists(id))
+  return self._id_to_archetype [id]:get_entity_component_values (id)
+end
+
 function World:_find_archetype (component_set)
   -- component_set keys are the components
   for _, a in ipairs (self._archetypes) do
@@ -521,7 +537,10 @@ function World:_find_archetype (component_set)
   end
   local component_map = {}
   for name, _ in pairs (component_set) do
-    component_map [name] = assert (self._component_types [name], 'unknown component')
+    if not self._component_types [name] then
+      error ('tried to add entity with unknown component "' .. tostring (name) .. '"')
+    end
+    component_map [name] = self._component_types [name]
   end
   local a = Archetype.new (component_map)
   table.insert (self._archetypes, a)
@@ -739,6 +758,12 @@ local function test_world()
     end
   end)
   assert (call_count == 1, 'query fn should be called on one entity')
+
+  -- test getting component values
+  local tbl = world:get_entity_component_values(id)
+  assert (tbl.position.x == 5)
+  assert (tbl.position.y == 10)
+  assert (tbl.size.value == 15)
 
   -- test removing components
   assert(world._id_to_archetype [id]._buffers.position, 'component position should be on the entity before removal')

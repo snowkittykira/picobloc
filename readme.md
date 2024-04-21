@@ -1,6 +1,7 @@
 # picobloc
 
-an archetype and userdata-based ecs library for picotron.
+an archetype and userdata-based ecs library for the
+[picotron fantasy workstation](https://www.lexaloffle.com/picotron.php).
 
 very much work in progress!
 
@@ -104,7 +105,7 @@ world.resources
 ```
 
 not used by picobloc itself, the world contains a `resources` table which
-you can use for storing any singletons / global state that needs to be
+you can use for storing any singletons or global state that needs to be
 accessed by systems.
 
 ```lua
@@ -112,8 +113,8 @@ world:component (name, { field_name = field_type, ... })
 ```
 
 creates a new component type. valid field types are the picotron userdata
-types, or the string 'value', which means the field is stored in a plain lua
-table instead of a userdata.
+types, or the string `'value'`, which means the field is stored in a plain
+lua table instead of a userdata.
 
 ```lua
 local id = world:add_entity ({ component_name = { component_field = value, ... }, ... })
@@ -166,7 +167,7 @@ following arguments:
 - the map of `{index -> entity id}` for all the entities in this archetype.
 - the maps of `{field -> buffer}` for the fields of each requested component.
   the buffers will usually be picotron userdata, but can be lua tables
-  if the corresponding field type is 'value' (or if not running in picotron).
+  if the corresponding field type is `'value'` (or if not running in picotron).
 
 note that all of these buffers (userdata or table) are *zero-based*, unlike
 typical lua. `ids.count` gives the number of entities in this batch, so to
@@ -194,3 +195,12 @@ buffers. if the entity does not match the given query, `fn` will not be called.
 
 you may remove/add entities and components during a query, but it won't
 actually happen until the whole query is done.
+
+```lua
+world:get_entity_component_values (id)
+```
+creates and returns a table containing a map of
+`{component_name -> {field_name -> field_value}}`.
+this is a copy of the original data, so modifying it has no effect on the
+entity. use this when you want to get all the component values, without
+knowing in advance which components are present.

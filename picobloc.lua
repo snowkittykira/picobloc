@@ -16,17 +16,17 @@
 --
 -- ```lua
 -- include 'picobloc.lua'
--- local w = World ()
+-- local world = World ()
 -- 
 -- -- define the components you're going to use
--- w:component ('position',     { x = 'f64', y = 'f64' })
--- w:component ('velocity',     { x = 'f64', y = 'f64' })
--- w:component ('acceleration', { x = 'f64', y = 'f64' })
--- w:component ('sprite',       { size = 'f64' })
+-- world:component ('position',     { x = 'f64', y = 'f64' })
+-- world:component ('velocity',     { x = 'f64', y = 'f64' })
+-- world:component ('acceleration', { x = 'f64', y = 'f64' })
+-- world:component ('sprite',       { size = 'f64' })
 -- 
 -- -- create some entities
 -- for i = 1, 4000 do
---   w:add_entity {
+--   world:add_entity {
 --     position = { x = rnd (480), y = rnd (270) },
 --     velocity = { x = rnd(1)-0.5, y = rnd(1)-0.5 },
 --     acceleration = { x = 0, y = 0.1 },
@@ -36,26 +36,26 @@
 -- 
 -- function _update ()
 --   -- query all entities with a velocity and an acceleration
---   w:query ({'velocity', 'acceleration'}, function (ids, velocities, accelerations)
+--   world:query ({'velocity', 'acceleration'}, function (ids, velocities, accelerations)
 --     -- apply acceleration using bulk userdata operations
 --     velocities.x:add (accelerations.x, true, 0, 0, ids.count)
 --     velocities.y:add (accelerations.y, true, 0, 0, ids.count)
 --   end)
 --
 --   -- query all entities with a position and a velocity
---   w:query ({'position', 'velocity'}, function (ids, positions, velocities)
+--   world:query ({'position', 'velocity'}, function (ids, positions, velocities)
 --     -- apply motion using bulk userdata operations
 --     positions.x:add (velocities.x, true, 0, 0, ids.count)
 --     positions.x:mod (480, true, 0, 0, ids.count)
 --     positions.y:add (velocities.y, true, 0, 0, ids.count)
 --   end)
 --
---   w:query ({'position', 'velocity'}, function (ids, positions, velocities)
+--   world:query ({'position', 'velocity'}, function (ids, positions, velocities)
 --     -- when you can't use bulk operations, loop through the entities.
 --     --
 --     -- note that unlike regular lua tables, `ids` and the field buffers use zero-based indices.
---     -- use ids.count to know how many items to process
---     for i = 0, ids.count-1 do
+--     -- use ids.first and ids.last to loop over the indices
+--     for i = ids.first, ids.last do
 --       if positions.y[i] >= 270 then
 --         positions.y[i] = -1
 --         velocities.y[i] = rnd(1)
@@ -67,9 +67,9 @@
 -- function _draw ()
 --   cls ()
 --   -- query all entities with a position and a sprite
---   w:query ({'position', 'sprite'}, function (ids, positions, sprites)
+--   world:query ({'position', 'sprite'}, function (ids, positions, sprites)
 --     -- draw all the sprites
---     for i = 0, ids.count-1 do
+--     for i = ids.first, ids.last do
 --       circ (positions.x[i], positions.y[i], sprites.size[i], 7)
 --     end
 --   end)
@@ -244,7 +244,7 @@ function Archetype.new (components_map)
   local self = setmetatable({}, Archetype)
   self._buffers = {}
   self._id_to_index = {}
-  self._ids = {count = 0} -- zero-based list
+  self._ids = {count = 0, first = 0, last = -1} -- zero-based list
   for name, component in pairs (components_map) do
     self._buffers [name] = ComponentBuffer.new (component)
   end
@@ -267,22 +267,23 @@ end
 
 function Archetype:query (components_list, fn)
   local args = {}
-  for _, component in ipairs (components_list) do
+  for c, component in ipairs (components_list) do
     local component_buffer = self._buffers[component]
-    table.insert (args, component_buffer and component_buffer.field_buffers)
+    args[c] = component_buffer and component_buffer.field_buffers
   end
   if self._ids.count > 0 then
-    fn (self._ids, unpack (args))
+    fn (self._ids, unpack (args, 1, #components_list))
   end
 end
 
 function Archetype:query_entity (id, components_list, fn)
   local index = assert (self._id_to_index [id], 'missing entity')
   local args = {}
-  for _, component in ipairs (components_list) do
-    table.insert (args, self._buffers[component].field_buffers)
+  for c, component in ipairs (components_list) do
+    local component_buffer = self._buffers[component]
+    args[c] = component_buffer and component_buffer.field_buffers
   end
-  fn (index, unpack (args))
+  fn (index, unpack (args, 1, #components_list))
 end
 
 function Archetype:matches_component_set_exactly (component_set)
@@ -309,6 +310,7 @@ function Archetype:add_entity (id, component_values)
     buffer:add (component_values [component] or {})
   end
   self._ids.count = self._ids.count + 1
+  self._ids.last = self._ids.count - 1
 end
 
 function Archetype:remove_entity (id)
@@ -322,6 +324,7 @@ function Archetype:remove_entity (id)
   self._ids [index] = self._ids [count-1]
   self._ids [count-1] = nil
   self._ids.count = count - 1
+  self._ids.last = self._ids.count - 1
 end
 
 function Archetype:get_entity_component_values (id)
@@ -810,14 +813,15 @@ local function test_advanced_queries ()
   world:component ('health', {value = 'f64'})
   world:component ('velocity', {x = 'f64', y = 'f64'})
 
-  world:add_entity {position = {x = 100, y = 200}}
+  local id = world:add_entity {position = {x = 100, y = 200}}
   world:add_entity {position = {x = 150, y = 225}, health = {value = 75}}
   world:add_entity {position = {x = 200, y = 250}, velocity = {x = 10, y = 10}, health = {value = 50}}
 
   local count = 0
   local health_count = 0
-  world:query({'!velocity', 'position', 'health?'}, function (ids, _position, health, ...)
+  world:query({'!velocity', 'health?', 'position', }, function (ids, health, position, ...)
     assert (select('#', ...) == 0, 'query function should only get three arguments')
+    assert (position, 'position should be provided as third argument')
     for i = 0, ids.count-1 do
       count = count + 1
       if health then
@@ -827,6 +831,12 @@ local function test_advanced_queries ()
         assert (health == nil)
       end
     end
+  end)
+
+  world:query_entity(id, {'!velocity', 'health?', 'position', }, function (_index, health, position, ...)
+    assert (select('#', ...) == 0, 'query function should only get three arguments')
+    assert (health == nil, 'health should be nil')
+    assert (position, 'position should be provided as third argument')
   end)
 
   assert (health_count == 1, 'should only find one health component')
